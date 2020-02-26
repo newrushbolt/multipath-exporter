@@ -17,11 +17,6 @@ else:
     import subprocess
 
 
-class MultipathdExporterException(Exception):
-    def __init__(self, *args, **kwargs):
-        Exception.__init__(self, *args, **kwargs)
-
-
 def validate_host():
     try:
         uid = os.getuid()
