@@ -42,7 +42,6 @@ def validate_host():
     except BaseException as err:
         logging.error("Cannot check multipath version: %s" % err)
         return False
-    return True
 
 
 def load_multipath_data():
@@ -62,6 +61,8 @@ def get_luns_state(multipath_data):
         metrics_object = {}
         metrics_labels = ['uuid', 'dm_st']
         metrics = []
+        if len(multipath_data['maps']) == 0:
+            logging.warning("No LUNs found")
         for lun in multipath_data['maps']:
             metric = {
                 "labels": [lun[label] for label in metrics_labels],
@@ -126,7 +127,7 @@ def main():
     update_metrics(main_registry)
 
     try:
-        prom.start_http_server(8080, registry=main_registry)
+        prom.start_http_server(listen_port, registry=main_registry)
     except BaseException as err:
         log_fatal("Cannot start HTTP server, exiting: %s" % err)
 
@@ -135,6 +136,8 @@ def main():
             main_registry.__init__(main_registry)
             update_metrics(main_registry)
             time.sleep(collect_interval)
+    except KeyboardInterrupt:
+        log_fatal("Exiting on keyboard interrupt")
     except BaseException as err:
         log_fatal("Main loop crashed, exiting: %s" % err)
 
