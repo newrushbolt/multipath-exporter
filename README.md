@@ -1,4 +1,4 @@
-# multipath-exporter
+# multipath_exporter
 
 Linux FC multipath exporter on Python
 
