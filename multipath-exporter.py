@@ -1,11 +1,11 @@
 #! /usr/bin/env python
 
 import argparse
-import getpass
 import json
 import logging
 import os
 import re
+import semver
 import sys
 import time
 
@@ -24,20 +24,22 @@ class MultipathdExporterException(Exception):
 
 def validate_host():
     try:
-        username = getpass.getuser()
-        if not username == 'root':
+        uid = os.getuid()
+        if uid != 0:
             logging.error("Must be run as root")
             return False
         multipath_help_stdout = subprocess.check_output(
             ['multipath', '-h'], stderr=subprocess.STDOUT, timeout=cmd_timeout)
         multipath_version_line = re.match(
             '^multipath-tools.*$', multipath_help_stdout, re.M).group(0)
-        multipath_version = multipath_version_line.split(' ')[1]
+        multipath_version = multipath_version_line.split(' ')[1].replace('v', '')
         logging.debug("Multipath version is <%s>" % multipath_version)
-        if re.match(multipath_regex_version, multipath_version):
+        if semver.compare(multipath_version, multipath_min_version) >= 0 and \
+           semver.compare(multipath_version, multipath_max_version) <= 0:
             return True
         else:
-            logging.error("Multipath version is unsupported")
+            logging.error("Multipath version <%s> is unsupported, must be between <%s> and <%s>" %
+                          (multipath_version, multipath_min_version, multipath_max_version))
             return False
     except BaseException as err:
         logging.error("Cannot check multipath version: %s" % err)
@@ -154,7 +156,8 @@ if __name__ == "__main__":
         cmd_timeout = parser_args.cmd_timeout
         collect_interval = parser_args.collect_interval
         listen_port = parser_args.listen_port
-        multipath_regex_version = "^v(4|5|6|7|8|9)\.[0-1]+\.[0-1]+"
+        multipath_min_version = '0.4.6'
+        multipath_max_version = '0.7.9'
     except BaseException as err:
         log_fatal("Cannot init variables, exiting: %s" % err)
     main()
