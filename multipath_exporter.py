@@ -5,16 +5,13 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
+import threading
 import time
 
 import prometheus_client as prom
 import semver
-
-if os.name == 'posix' and sys.version_info[0] < 3:
-    import subprocess32 as subprocess
-else:
-    import subprocess
 
 
 class MultipathdExporterException(Exception):
@@ -22,20 +19,52 @@ class MultipathdExporterException(Exception):
         Exception.__init__(self, *args, **kwargs)
 
 
+# This allows tunning cmd with timeout on Python2 with no subprocess32 module installed
+def run_command_w_timeout(cmd_args, timeout=5, split_err_w_out=False):
+    global killed_by_timeout
+    globals()['killed_by_timeout'] = False
+
+    def kill_stucked_cmd(process):
+        globals()['killed_by_timeout'] = True
+        print('Killed')
+        process.kill()
+
+    cmd_call = subprocess.Popen(cmd_args, universal_newlines=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd_timer = threading.Timer(timeout, kill_stucked_cmd, [cmd_call])
+    cmd_stdout = ""
+    try:
+        cmd_timer.start()
+        cmd_stdout, cmd_stderr = cmd_call.communicate()
+        if split_err_w_out:
+            cmd_stdout += cmd_stderr
+    finally:
+        cmd_timer.cancel()
+    if globals()['killed_by_timeout']:
+        logging.warning("Process <%s> is killed by timeout <%s>, stdout: %s",
+                        cmd_args, timeout, cmd_stdout)
+        return None
+
+    return cmd_stdout
+
+
 def validate_host():
     try:
         uid = os.getuid()
         if uid != 0:
-            logging.error("Must be run as root")
+            logging.error("Must be run as root, uid<%s> != 0", uid)
             return False
-        multipath_help_stdout = subprocess.check_output(
-            ['multipath', '-h'], stderr=subprocess.STDOUT, timeout=cmd_timeout)
-        multipath_version_line = re.match(
-            '^multipath-tools.*$', multipath_help_stdout, re.M).group(0)
-        multipath_version = multipath_version_line.split(' ')[1].replace('v', '')
+        multipath_help_stdout = run_command_w_timeout(
+            ['multipath', '-h'], timeout=cmd_timeout, split_err_w_out=True)
+        logging.debug("Multipath help response is <%s>", multipath_help_stdout)
+        multipath_version_line = re.findall(
+            '^multipath-tools v.*$', multipath_help_stdout, re.M)
+        logging.debug("Lines with versions found: %s", multipath_version_line)
+        multipath_version = multipath_version_line[0].split(' ')[1].replace('v', '')
         logging.debug("Multipath version is <%s>", multipath_version)
         if semver.compare(multipath_version, multipath_min_version) >= 0 and \
            semver.compare(multipath_version, multipath_max_version) <= 0:
+            logging.debug("Multipath version <%s> is supported", multipath_version)
             return True
         else:
             logging.error("Multipath version <%s> is unsupported, must be between <%s> and <%s>",
@@ -49,8 +78,8 @@ def validate_host():
 def load_multipath_data():
     src_data = {}
     try:
-        multipathd_output = subprocess.check_output(
-            ['multipathd', 'show', 'maps', 'json'], stderr=subprocess.STDOUT, timeout=cmd_timeout)
+        multipathd_output = run_command_w_timeout(['multipathd', 'show', 'maps', 'json'],
+                                                  timeout=cmd_timeout)
         src_data = json.loads(multipathd_output)
     except BaseException as err:
         logging.error("Cannot get valid data from multipathd: %s", err)
@@ -66,8 +95,11 @@ def get_luns_state(multipath_data):
         if not multipath_data['maps']:
             logging.warning("No LUNs found")
         for lun in multipath_data['maps']:
+            metrics_for_labels = [lun[label] for label in metrics_labels]
+            logging.debug("Found LUN with labels|metrics|values: %s|%s|%s",
+                          metrics_labels, metrics_for_labels, lun['paths'])
             metric = {
-                "labels": [lun[label] for label in metrics_labels],
+                "labels": metrics_for_labels,
                 "value": lun['paths']
             }
             metrics.append(metric)
@@ -145,9 +177,10 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     try:
         parser = argparse.ArgumentParser(description='Multipath LUN metrics exporter')
+        parser.add_argument("--log-level", default="info",
+                            help="Logging level (error|info|debug), string, default info")
         parser.add_argument("--listen-port", default=9684,
                             help="Port to listen, int, default 9684")
         parser.add_argument("--cmd-timeout", default=2.0,
@@ -161,6 +194,13 @@ if __name__ == "__main__":
         listen_port = parser_args.listen_port
         multipath_min_version = '0.4.6'
         multipath_max_version = '0.7.9'
+
+        if parser_args.log_level == 'error':
+            logging.basicConfig(level=logging.ERROR)
+        elif parser_args.log_level == 'info':
+            logging.basicConfig(level=logging.INFO)
+        elif parser_args.log_level == 'debug':
+            logging.basicConfig(level=logging.DEBUG)
     except BaseException as err:
         log_fatal("Cannot init variables, exiting: %s", err)
     main()
