@@ -26,7 +26,6 @@ def run_command_w_timeout(cmd_args, timeout=5, split_err_w_out=False):
 
     def kill_stucked_cmd(process):
         globals()['killed_by_timeout'] = True
-        print('Killed')
         process.kill()
 
     cmd_call = subprocess.Popen(cmd_args, universal_newlines=True,
@@ -55,7 +54,7 @@ def validate_host():
             logging.error("Must be run as root, uid<%s> != 0", uid)
             return False
         multipath_help_stdout = run_command_w_timeout(
-            ['multipath', '-h'], timeout=cmd_timeout, split_err_w_out=True)
+            ['multipath', '--help'], timeout=cmd_timeout, split_err_w_out=True)
         logging.debug("Multipath help response is <%s>", multipath_help_stdout)
         multipath_version_line = re.findall(
             '^multipath-tools v.*$', multipath_help_stdout, re.M)
@@ -155,15 +154,15 @@ def main():
 
     try:
         main_registry = prom.CollectorRegistry()
-    except BaseException as err:
-        log_fatal("Cannot init prometheus collector: %s", err)
+    except BaseException:
+        log_fatal("Cannot init prometheus collector:  ", exc_info=True)
 
     update_metrics(main_registry)
 
     try:
         prom.start_http_server(listen_port, registry=main_registry)
-    except BaseException as err:
-        log_fatal("Cannot start HTTP server, exiting: %s", err)
+    except BaseException:
+        log_fatal("Cannot start HTTP server, exiting: ", exc_info=True)
 
     try:
         while True:
@@ -172,8 +171,8 @@ def main():
             time.sleep(collect_interval)
     except KeyboardInterrupt:
         log_fatal("Exiting on keyboard interrupt")
-    except BaseException as err:
-        log_fatal("Main loop crashed, exiting: %s", err)
+    except BaseException:
+        log_fatal("Main loop crashed, exiting: ", exc_info=True)
 
 
 if __name__ == "__main__":
@@ -201,6 +200,8 @@ if __name__ == "__main__":
             logging.basicConfig(level=logging.INFO)
         elif parser_args.log_level == 'debug':
             logging.basicConfig(level=logging.DEBUG)
-    except BaseException as err:
-        log_fatal("Cannot init variables, exiting: %s", err)
+    except SystemExit:
+        sys.exit(0)
+    except BaseException:
+        log_fatal("Cannot init variables, exiting", exc_info=True)
     main()
