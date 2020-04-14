@@ -13,6 +13,11 @@ import time
 import prometheus_client as prom
 import semver
 
+try:
+    import Queue as queue
+except ImportError:
+    import queue
+
 
 class MultipathdExporterException(Exception):
     def __init__(self, *args, **kwargs):
@@ -21,16 +26,15 @@ class MultipathdExporterException(Exception):
 
 # This allows tunning cmd with timeout on Python2 with no subprocess32 module installed
 def run_command_w_timeout(cmd_args, timeout=5, split_err_w_out=False):
-    global killed_by_timeout
-    globals()['killed_by_timeout'] = False
+    timeout_errors = queue.Queue(1)
 
-    def kill_stucked_cmd(process):
-        globals()['killed_by_timeout'] = True
+    def kill_stucked_cmd(process, timeout_errors):
+        timeout_errors.put({})
         process.kill()
 
     cmd_call = subprocess.Popen(cmd_args, universal_newlines=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    cmd_timer = threading.Timer(timeout, kill_stucked_cmd, [cmd_call])
+    cmd_timer = threading.Timer(timeout, kill_stucked_cmd, [cmd_call, timeout_errors])
     cmd_stdout = ""
     try:
         cmd_timer.start()
@@ -39,7 +43,7 @@ def run_command_w_timeout(cmd_args, timeout=5, split_err_w_out=False):
             cmd_stdout += cmd_stderr
     finally:
         cmd_timer.cancel()
-    if globals()['killed_by_timeout']:
+    if not timeout_errors.empty():
         logging.warning("Process <%s> is killed by timeout <%s>, stdout: %s",
                         cmd_args, timeout, cmd_stdout)
         return None
