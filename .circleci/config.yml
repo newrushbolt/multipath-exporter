@@ -1,0 +1,25 @@
+version: 2.1
+
+jobs:
+  test_python_2_7_13:
+    docker:
+      - image: circleci/python:2.7.13
+    steps: &python_test
+      - checkout
+      - run: sudo pip install -r requirements.txt
+      - run: python -m unittest multipath_exporter_test
+  test_python_3_6:
+    docker:
+      - image: circleci/python:3.6
+    steps: *python_test
+  test_python_3_8:
+    docker:
+      - image: circleci/python:3.8
+    steps: *python_test
+
+workflows:
+  main:
+    jobs:
+      - test_python_2_7_13
+      - test_python_3_6
+      - test_python_3_8
