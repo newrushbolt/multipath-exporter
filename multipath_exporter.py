@@ -66,13 +66,12 @@ def validate_host():
         multipath_version = multipath_version_line[0].split(' ')[1].replace('v', '')
         logging.debug("Multipath version is <%s>", multipath_version)
         if semver.compare(multipath_version, multipath_min_version) >= 0 and \
-           semver.compare(multipath_version, multipath_max_version) <= 0:
+           semver.compare(multipath_version, multipath_max_version) <= 0:  # pylint: disable=chained-comparison
             logging.debug("Multipath version <%s> is supported", multipath_version)
             return True
-        else:
-            logging.error("Multipath version <%s> is unsupported, must be between <%s> and <%s>",
-                          multipath_version, multipath_min_version, multipath_max_version)
-            return False
+        logging.error("Multipath version <%s> is unsupported, must be between <%s> and <%s>",
+                      multipath_version, multipath_min_version, multipath_max_version)
+        return False
     except BaseException as err:
         logging.error("Cannot check multipath version: %s", err)
         return False
