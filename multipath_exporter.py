@@ -25,7 +25,7 @@ class MultipathdExporterException(Exception):
 
 
 # This allows tunning cmd with timeout on Python2 with no subprocess32 module installed
-def run_command_w_timeout(cmd_args, timeout=5, split_err_w_out=False):
+def run_command_w_timeout(cmd_args, timeout=5, append_stderr_to_stdout=False):
     timeout_errors = queue.Queue(1)
 
     def kill_stucked_cmd(process, timeout_errors):
@@ -39,7 +39,7 @@ def run_command_w_timeout(cmd_args, timeout=5, split_err_w_out=False):
     try:
         cmd_timer.start()
         cmd_stdout, cmd_stderr = cmd_call.communicate()
-        if split_err_w_out:
+        if append_stderr_to_stdout:
             cmd_stdout += cmd_stderr
     finally:
         cmd_timer.cancel()
@@ -58,7 +58,7 @@ def validate_host():
             logging.error("Must be run as root, uid<%s> != 0", uid)
             return False
         multipath_help_stdout = run_command_w_timeout(
-            ['multipath', '--help'], timeout=cmd_timeout, split_err_w_out=True)
+            ['multipath', '--help'], timeout=cmd_timeout, append_stderr_to_stdout=True)
         logging.debug("Multipath help response is <%s>", multipath_help_stdout)
         multipath_version_line = re.findall(
             '^multipath-tools v.*$', multipath_help_stdout, re.M)
