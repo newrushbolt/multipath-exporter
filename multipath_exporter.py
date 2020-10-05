@@ -154,6 +154,8 @@ def main():
 
     if not validate_host():
         raise MultipathdExporterException("Cannot work on this host")
+    if validate_only:
+        sys.exit(0)
 
     try:
         main_registry = prom.CollectorRegistry()
@@ -189,11 +191,14 @@ if __name__ == "__main__":
                             help="Timeout for shell calls, float, default 2.0")
         parser.add_argument("--collect-interval", default=60.0,
                             help="Metrics update interval, float, default 60.0")
+        parser.add_argument("--validate-only", action="store_true",
+                            help="Only validates host and exits")
         parser_args = parser.parse_args()
 
         cmd_timeout = parser_args.cmd_timeout
         collect_interval = parser_args.collect_interval
         listen_port = parser_args.listen_port
+        validate_only = parser_args.validate_only
         multipath_min_version = '0.4.6'
         multipath_max_version = '0.7.9'
 
