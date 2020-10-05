@@ -32,6 +32,7 @@ def run_command_w_timeout(cmd_args, timeout=5, append_stderr_to_stdout=False):
         timeout_errors.put({})
         process.kill()
 
+    logging.debug("Execing command: %s", cmd_args)
     cmd_call = subprocess.Popen(cmd_args, universal_newlines=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     cmd_timer = threading.Timer(timeout, kill_stucked_cmd, [cmd_call, timeout_errors])
@@ -47,6 +48,7 @@ def run_command_w_timeout(cmd_args, timeout=5, append_stderr_to_stdout=False):
         logging.warning("Process <%s> is killed by timeout <%s>, stdout: %s",
                         cmd_args, timeout, cmd_stdout)
         return None
+    logging.debug("Command stdout: %s", cmd_stdout)
 
     return cmd_stdout
 
